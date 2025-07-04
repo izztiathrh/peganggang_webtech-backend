@@ -2,60 +2,76 @@
 // backend/config/database.php
 
 class Database {
-    // Database configuration
-    private $host = 'sql203.infinityfree.com';
-    private $db_name = 'if0_39389102_flexstock_inventory';
-    private $username = 'if0_39389102';
-    private $password = 'pV7jQiQLXULzDj1';
+    private $host;
+    private $db_name;
+    private $username;
+    private $password;
     private $charset = 'utf8mb4';
+    private $port;
     
-    // Database connection
-    private $conn;
+    public function __construct() {
+        // Check for various environment configurations
+        
+        // 1. Check for DATABASE_URL (Render, Heroku style)
+        if ($database_url = getenv('DATABASE_URL')) {
+            $url = parse_url($database_url);
+            $this->host = $url['host'];
+            $this->db_name = ltrim($url['path'], '/');
+            $this->username = $url['user'];
+            $this->password = $url['pass'];
+            $this->port = $url['port'] ?? 5432;
+        } 
+        // 2. Check for individual environment variables
+        elseif (getenv('DB_HOST')) {
+            $this->host = getenv('DB_HOST');
+            $this->db_name = getenv('DB_NAME') ?: 'flexstock_inventory';
+            $this->username = getenv('DB_USER');
+            $this->password = getenv('DB_PASS');
+            $this->port = getenv('DB_PORT') ?: 3306;
+        }
+        // 3. Fallback to local development
+        else {
+            $this->host = 'localhost';
+            $this->db_name = 'flexstock_inventory';
+            $this->username = 'root';
+            $this->password = '';
+            $this->port = 3306;
+        }
+    }
     
-    /**
-     * Get database connection
-     * @return PDO|null
-     */
     public function getConnection() {
         $this->conn = null;
         
         try {
-            // Data Source Name
-            $dsn = "mysql:host=" . $this->host . ";dbname=" . $this->db_name . ";charset=" . $this->charset;
+            // Determine if PostgreSQL or MySQL
+            if (getenv('DATABASE_URL') || $this->port == 5432) {
+                // PostgreSQL (Render)
+                $dsn = "pgsql:host=" . $this->host . ";port=" . $this->port . ";dbname=" . $this->db_name;
+            } else {
+                // MySQL (local, other hosts)
+                $dsn = "mysql:host=" . $this->host . ";port=" . $this->port . ";dbname=" . $this->db_name . ";charset=" . $this->charset;
+            }
             
-            // PDO options
             $options = [
                 PDO::ATTR_ERRMODE            => PDO::ERRMODE_EXCEPTION,
                 PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
                 PDO::ATTR_EMULATE_PREPARES   => false,
-                PDO::MYSQL_ATTR_INIT_COMMAND => "SET NAMES utf8mb4"
             ];
             
-            // Create PDO instance
             $this->conn = new PDO($dsn, $this->username, $this->password, $options);
             
         } catch(PDOException $exception) {
-            // Log error (in production, you'd log this to a file)
             error_log("Database connection error: " . $exception->getMessage());
-            
-            // Return null on connection failure
             return null;
         }
         
         return $this->conn;
     }
     
-    /**
-     * Close database connection
-     */
     public function closeConnection() {
         $this->conn = null;
     }
     
-    /**
-     * Test database connection
-     * @return bool
-     */
     public function testConnection() {
         $connection = $this->getConnection();
         return $connection !== null;
